@@ -101,9 +101,68 @@ the live mirror (base turned the same direction as the physical arm).
 
 ## Roadmap
 
-- [ ] Sim -> Real trajectory execution (with per-joint velocity limits + e-stop)
-- [ ] Gripper span calibration (motor 7 rad -> finger prismatic/revolute range)
+- [x] Sim -> Real trajectory execution (with per-joint velocity limits + e-stop) — `scripts/rebot_daemon.py`
+- [x] Gripper span calibration (motor 7 rad -> finger range) — calibrated defaults in the daemon (open −6.8 rad / close 0.0)
+- [x] XR teleoperation (Quest 3 controllers -> real arm) — `scripts/xr_teleop_rebot.py`
 - [ ] Eye-in-hand RGB-D (RealSense D455) + GraspNet pipeline on top
+
+## Real -> Sim vs teleoperation stacks
+
+Two independent ways to drive/read the arm live in `scripts/`; both speak the same
+UDP mirror format so the Isaac Sim twin works with either:
+
+- `real_to_sim_bridge.py` — passive reader (never enables motors), minimal deps.
+- `rebot_daemon.py` — full HTTP control daemon (single owner of the serial port):
+  state/FK/IK, blocking moves, **`/servo` streaming teleop**, gripper, e-stop,
+  torque/temperature watchdogs, and the same UDP mirror on 127.0.0.1:5801.
+  Kinematics need `pin` (Pinocchio) plus the URDF from
+  [reBotArm_control_py](https://github.com/vectorBH6/reBotArm_control_py)
+  (override the path with `REBOT_URDF` or `--urdf`).
+
+```bash
+python scripts/rebot_daemon.py                  # owns /dev/ttyACM0
+python scripts/rebot_client.py health           # joints_seen 1-7, kinematics ok
+python scripts/rebot_client.py enable           # holds current pose (no jump)
+python scripts/rebot_client.py move-pose 0.30 0.0 0.25 --vlim 0.3
+python scripts/rebot_client.py gripper close
+python scripts/rebot_client.py estop            # e-stop (disable_all)
+```
+
+## XR teleoperation (Quest 3 -> real arm)
+
+`scripts/xr_teleop_rebot.py` drives the physical arm from Quest 3 controllers over
+NVIDIA Isaac Teleop / CloudXR:
+
+```
+Quest 3 controllers --CloudXR--> XRController (lerobot isaac_teleop)
+    -> PoseGate (occlusion ghost / snap-back guard)
+    -> Clutch (squeeze-to-engage + anti-windup leash)
+    -> rebot_daemon /servo (warm-seeded IK + step clamp + watchdogs)
+    -> Damiao motors (POS_VEL)
+```
+
+Controls: **squeeze** (hold) engages the clutch — hand deltas drive the EE 1:1;
+release and the arm holds. **Trigger** drives the gripper proportionally. All
+operator feedback is in-headset haptics (engage/release buzz, workspace-edge buzz,
+pose-lost pulse); if the XR session drops (headset sleep / Wi-Fi), the arm holds
+and the script relaunches CloudXR until the headset returns.
+
+Prerequisites (beyond this repo): the `isaac_teleop` teleoperator stack from
+[huggingface/lerobot#3927](https://github.com/huggingface/lerobot/pull/3927)
+(or the [johnnynunez/lerobot](https://github.com/johnnynunez/lerobot) fork, which
+adds `PoseGate`/`Clutch.limit_lead`) with the `isaac-teleop` extra installed, and
+a CloudXR-connected Quest 3.
+
+```bash
+python scripts/rebot_daemon.py                          # terminal 1 (arm venv)
+# terminal 2 (lerobot venv):
+python scripts/xr_teleop_rebot.py                       # 20 Hz, 6 cm leash
+python scripts/xr_teleop_rebot.py --hz 25 --max-lead-m 0.08 --hand left
+```
+
+Verified on hardware: live tracking, clutch engage/release, workspace-edge leash,
+proportional gripper, IK-unreachable frames held (arm never lurches), XR-session
+loss recovery.
 
 ## Repository layout
 
@@ -115,6 +174,9 @@ scripts/
   read_joints.py          # print joint positions (sanity check)
   move_joint_test.py      # supervised single-joint move (POS_VEL, slow)
   isaacsim_client.py      # minimal TCP client for Isaac Sim python_server
+  rebot_daemon.py         # HTTP control daemon (FK/IK, moves, /servo, e-stop)
+  rebot_client.py         # CLI client for the daemon
+  xr_teleop_rebot.py      # Quest 3 XR controller teleop of the real arm
 isaac/
   01_load_arm_stage.py    # open the arm USD stage (runs inside Isaac Sim)
   02_start_mirror.py      # play + articulation + UDP mirror listener

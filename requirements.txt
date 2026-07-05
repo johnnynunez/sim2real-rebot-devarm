@@ -1,2 +1,3 @@
 motorbridge>=0.4.8
 numpy
+pin  # Pinocchio, for rebot_daemon.py FK/IK (optional for the passive bridge)
