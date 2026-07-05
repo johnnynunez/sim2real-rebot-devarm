@@ -1,0 +1,300 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "URDF USD Converter v0.2.0"
+    }
+    defaultPrim = "tn__00armrs_asmv3_hJ6D"
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    upAxis = "Z"
+)
+
+def Xform "tn__00armrs_asmv3_hJ6D" (
+    prepend apiSchemas = ["GeomModelAPI"]
+    assetInfo = {
+        string name = "00-arm-rs_asm-v3"
+    }
+    displayName = "00-arm-rs_asm-v3"
+    kind = "component"
+    prepend payload = @./Payload/Contents.usda@
+)
+{
+    float3[] extentsHint = [(-0.2596303, -0.1, -1.0949644e-11), (0.30171034, 0.1, 0.3207462), (3.4028235e38, 3.4028235e38, 3.4028235e38), (-3.4028235e38, -3.4028235e38, -3.4028235e38), (3.4028235e38, 3.4028235e38, 3.4028235e38), (-3.4028235e38, -3.4028235e38, -3.4028235e38), (-0.2596303, -0.1, -1.0949644e-11), (0.30171034, 0.1, 0.32074627)]
+
+    over "MDLMaterials" (
+        prepend references = @./Payload/MDLMaterials.usda@</Materials>
+    )
+    {
+    }
+
+    over "Geometry"
+    {
+        over "base_link"
+        {
+            over "base_link" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather>
+            }
+
+            over "link1"
+            {
+                over "link1" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                }
+
+                over "link2"
+                {
+                    over "motor_2_3" (
+                        prepend apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized_Black>
+                    }
+
+                    over "cnc2" (
+                        prepend apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                    }
+
+                    over "pla2_black" (
+                        prepend apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather>
+                    }
+
+                    over "pla2_green" (
+                        prepend apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather_Pop_Lime>
+                    }
+
+                    over "link3"
+                    {
+                        over "cnc3" (
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                        }
+
+                        over "motor_4" (
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized_Black>
+                        }
+
+                        over "pla3_black" (
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather>
+                        }
+
+                        over "pla3_green" (
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather_Pop_Lime>
+                        }
+
+                        over "link4"
+                        {
+                            over "motor_5" (
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized_Black>
+                            }
+
+                            over "cnc4" (
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                            }
+
+                            over "link5"
+                            {
+                                over "motor_6" (
+                                    prepend apiSchemas = ["MaterialBindingAPI"]
+                                )
+                                {
+                                    rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized_Black>
+                                }
+
+                                over "cnc5" (
+                                    prepend apiSchemas = ["MaterialBindingAPI"]
+                                )
+                                {
+                                    rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                                }
+
+                                over "pla5_green" (
+                                    prepend apiSchemas = ["MaterialBindingAPI"]
+                                )
+                                {
+                                    rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather_Pop_Lime>
+                                }
+
+                                over "link6"
+                                {
+                                    over "link6" (
+                                        prepend apiSchemas = ["MaterialBindingAPI"]
+                                    )
+                                    {
+                                        rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                                    }
+
+                                    over "gripper_end"
+                                    {
+                                        over "pla7_green" (
+                                            prepend apiSchemas = ["MaterialBindingAPI"]
+                                        )
+                                        {
+                                            rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather_Pop_Lime>
+                                        }
+
+                                        over "cnc7" (
+                                            prepend apiSchemas = ["MaterialBindingAPI"]
+                                        )
+                                        {
+                                            rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                                        }
+
+                                        over "motor_7" (
+                                            prepend apiSchemas = ["MaterialBindingAPI"]
+                                        )
+                                        {
+                                            rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized_Black>
+                                        }
+
+                                        over "gripper_left"
+                                        {
+                                            over "pla_left" (
+                                                prepend apiSchemas = ["MaterialBindingAPI"]
+                                            )
+                                            {
+                                                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather>
+                                            }
+
+                                            over "cnc_left" (
+                                                prepend apiSchemas = ["MaterialBindingAPI"]
+                                            )
+                                            {
+                                                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                                            }
+
+                                            over "gripper_left" (
+                                                prepend apiSchemas = ["MaterialBindingAPI"]
+                                            )
+                                            {
+                                                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather>
+                                            }
+                                        }
+
+                                        over "gripper_right"
+                                        {
+                                            over "pla_right" (
+                                                prepend apiSchemas = ["MaterialBindingAPI"]
+                                            )
+                                            {
+                                                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather>
+                                            }
+
+                                            over "cnc_right" (
+                                                prepend apiSchemas = ["MaterialBindingAPI"]
+                                            )
+                                            {
+                                                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                                            }
+
+                                            over "gripper_right" (
+                                                prepend apiSchemas = ["MaterialBindingAPI"]
+                                            )
+                                            {
+                                                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather>
+                                            }
+                                        }
+
+                                        over "gripper_end" (
+                                            prepend apiSchemas = ["MaterialBindingAPI"]
+                                        )
+                                        {
+                                            rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized_Black>
+                                        }
+                                    }
+
+                                    over "link6_1" (
+                                        prepend apiSchemas = ["MaterialBindingAPI"]
+                                    )
+                                    {
+                                        rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                                    }
+                                }
+
+                                over "link5" (
+                                    prepend apiSchemas = ["MaterialBindingAPI"]
+                                )
+                                {
+                                    rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                                }
+                            }
+
+                            over "link4" (
+                                prepend apiSchemas = ["MaterialBindingAPI"]
+                            )
+                            {
+                                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                            }
+                        }
+
+                        over "link3" (
+                            prepend apiSchemas = ["MaterialBindingAPI"]
+                        )
+                        {
+                            rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                        }
+                    }
+
+                    over "link2" (
+                        prepend apiSchemas = ["MaterialBindingAPI"]
+                    )
+                    {
+                        rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                    }
+                }
+
+                over "link1_1" (
+                    prepend apiSchemas = ["MaterialBindingAPI"]
+                )
+                {
+                    rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
+                }
+            }
+
+            over "base_link_1" (
+                prepend apiSchemas = ["MaterialBindingAPI"]
+            )
+            {
+                rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather>
+            }
+        }
+    }
+}
+
+def PhysicsScene "PhysicsScene" (
+    prepend payload = @./Payload/Contents.usda@</PhysicsScene>
+)
+{
+}
+

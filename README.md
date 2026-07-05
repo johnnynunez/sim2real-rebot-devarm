@@ -51,16 +51,16 @@ cd <IsaacSim>/_build/linux-$(uname -m)/release
 # wait for the app to finish loading; the server listens on 127.0.0.1:8226
 ```
 
-> The USD asset of the arm is expected at the path passed in step 1 below.
-> Ours lives in `00-arm-rs_asm-v3` (URDF converted with urdf-usd-converter,
-> validated on both Newton and PhysX).
+> The arm USD asset ships in this repo: `assets/00-arm-rs_asm-v3/00-arm-rs_asm-v3.usda`
+> (URDF converted with urdf-usd-converter, exact inertia round-trip, validated on
+> both Newton and PhysX — see `assets/00-arm-rs_asm-v3/VALIDATION.md`).
 
 ## Run the Real -> Sim mirror
 
 ```bash
 # 1. Load the arm USD into Isaac Sim (shared remote context)
 python scripts/isaacsim_client.py --timeout 180 \
-    --arg usd_path=/absolute/path/to/00-arm-rs_asm-v3.usda \
+    --arg usd_path=$PWD/assets/00-arm-rs_asm-v3/00-arm-rs_asm-v3.usda \
     --file isaac/01_load_arm_stage.py
 
 # 2. Start playback + UDP mirror listener inside Isaac Sim
@@ -108,6 +108,8 @@ the live mirror (base turned the same direction as the physical arm).
 ## Repository layout
 
 ```
+assets/
+  00-arm-rs_asm-v3/       # arm USD package (Newton+PhysX validated) + evidence
 scripts/
   real_to_sim_bridge.py   # real arm -> UDP joint stream (passive, 50 Hz)
   read_joints.py          # print joint positions (sanity check)
@@ -117,4 +119,22 @@ isaac/
   01_load_arm_stage.py    # open the arm USD stage (runs inside Isaac Sim)
   02_start_mirror.py      # play + articulation + UDP mirror listener
   03_mirror_status.py     # packet counter / current sim q
+  04_fix_newton_contacts.py  # fix MJWarp "exceeded limit (200)" contact overflow
 ```
+
+## Troubleshooting
+
+**`Number of Newton contacts (N) exceeded MJWarp limit (200). Increase nconmax.`**
+
+The MuJoCo-Warp solver pre-allocates a fixed contact buffer. Scenes with a
+ground plane / table under the gripper's convex-decomposition colliders can
+overflow the 200-contact default. Fix at runtime (raises the caps and rebuilds
+the solver model):
+
+```bash
+python scripts/isaacsim_client.py --timeout 300 --file isaac/04_fix_newton_contacts.py
+```
+
+Do not raise `nconmax` beyond Newton's allocated `rigid_contact_max` — the
+script clamps automatically (values above it make every step error out).
+
