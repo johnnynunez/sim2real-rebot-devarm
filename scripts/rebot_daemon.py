@@ -12,6 +12,7 @@ Single owner of the serial port. Exposes a small JSON API for agent tools:
     POST /move_joints    {"q": [6 floats rad], "vlim": 0.5}
     POST /move_pose      {"xyz": [3], "rpy": [3], "vlim": 0.5}  (IK + move)
     POST /gripper        {"action": "open"|"close"} or {"pos": rad}
+    POST /rehome_gripper close-until-stall re-zero (multi-turn wrap recovery)
 
 Safety model:
   - Motors are NEVER enabled at startup (passive feedback polling only).
@@ -55,6 +56,19 @@ SERVO_MAX_STEP_RAD = 0.08   # per-servo-call joint step clamp (teleop streaming)
 # and blocks whole motion directions. Small, verified-safe margin.
 LIMIT_MARGIN_RAD = 0.05
 GRIPPER_CLOSE_TORQUE = 1.5   # Nm plateau => object grasped
+# Gripper protection: streaming teleop once drove the jaws to the mechanical
+# open stop and cracked the plastic fingers, so /servo gets its own (tighter)
+# opening bound and a slower velocity cap, and any blocking /gripper move
+# aborts on a sustained stall instead of grinding for the whole timeout.
+SERVO_GRIPPER_VLIM = 2.0     # rad/s cap for gripper targets streamed via /servo
+GRIPPER_STALL_TORQUE = 1.0   # Nm sustained short of target => stalled, stop pushing
+# Multi-turn wrap protection: the Damiao turn counter is volatile across power
+# cycles, so the gripper can wake up reading physical + 2*pi*k. /enable refuses
+# when the reading falls outside the calibrated travel plus this margin, and
+# POST /rehome_gripper restores the close==0 frame by stalling against the stop.
+GRIPPER_WRAP_MARGIN = 0.5          # rad of tolerance around [open, close]
+GRIPPER_REHOME_STALL_TORQUE = 0.8  # Nm sustained => mechanical stop reached
+GRIPPER_REHOME_MAX_TRAVEL = 8.0    # rad sweep guard
 # URDF for FK/IK; override with REBOT_URDF or --urdf for other checkouts.
 URDF = os.environ.get(
     "REBOT_URDF",
@@ -224,8 +238,97 @@ class ArmDaemon:
         return self.last_error
 
     # ---------------- commands ----------------
+    def _gripper_wrap_check(self):
+        """Detect a 2*pi-wrapped multi-turn gripper reading before enabling motors.
+
+        The Damiao multi-turn counter is volatile across power cycles: the
+        single-turn absolute zero survives, the turn count does not. The gripper
+        travel (~6.8 rad) exceeds one turn, so after a repower it can report
+        physical + 2*pi*k (verified: physically closed gripper reading +6.227 rad
+        = -0.056 + 2*pi in the close=0/open=-6.8 frame). Absolute open/close
+        targets are then wrong by whole turns and drive the mechanism into its
+        stop through the gear reduction -- the prime suspect for silently latched
+        coil over-temp faults. Returns the offending reading, or None if sane.
+        """
+        s = self.state.get(GRIPPER_ID)
+        if s is None or self.args.gripper_open is None or self.args.gripper_close is None:
+            return None
+        lo = min(self.args.gripper_open, self.args.gripper_close) - GRIPPER_WRAP_MARGIN
+        hi = max(self.args.gripper_open, self.args.gripper_close) + GRIPPER_WRAP_MARGIN
+        pos = s["pos"]
+        return None if lo <= pos <= hi else pos
+
+    def rehome_gripper(self):
+        """Close the gripper until stall against the mechanical stop, re-zero there.
+
+        Restores the close==0 convention regardless of the 2*pi branch the encoder
+        woke up on. Only the gripper motor is enabled during the sweep; it is
+        disabled again afterwards (arm state is untouched).
+        """
+        if self.enabled:
+            raise RuntimeError("disable motors before re-homing (POST /disable first)")
+        self._require_fresh_state()
+        m = self.motors[GRIPPER_ID]
+        step, vlim, settle = 0.05, 0.5, 0.15
+        with self.lock:
+            m.clear_error()
+            m.enable()
+            m.ensure_mode(Mode.POS_VEL)
+        try:
+            start = self.state[GRIPPER_ID]["pos"]
+            target = start
+            strikes = 0
+            stalled = False
+            # Closing direction is positive (open=-6.8 < close=0.0).
+            while abs(target - start) < GRIPPER_REHOME_MAX_TRAVEL:
+                target += step
+                with self.lock:
+                    m.send_pos_vel(pos=target, vlim=vlim)
+                time.sleep(settle)
+                s = self.state.get(GRIPPER_ID)
+                if s is None:
+                    continue
+                if abs(s["torq"]) > GRIPPER_REHOME_STALL_TORQUE or abs(s["pos"] - target) > 0.3:
+                    strikes += 1
+                    if strikes >= 3:
+                        stalled = True
+                        break
+                else:
+                    strikes = 0
+            if not stalled:
+                raise RuntimeError(
+                    f"gripper re-homing failed: no stall within "
+                    f"{GRIPPER_REHOME_MAX_TRAVEL:.1f} rad of travel")
+        finally:
+            with self.lock:
+                m.disable()
+        time.sleep(0.3)  # torque off: let the gears relax onto the stop
+        with self.lock:
+            m.set_zero_position()
+        time.sleep(0.3)
+        pos = None
+        for _ in range(20):  # wait for the poll loop to pick up the re-zeroed value
+            time.sleep(0.1)
+            s = self.state.get(GRIPPER_ID)
+            if s is not None and self.state_t > time.time() - 0.5:
+                pos = s["pos"]
+                break
+        if pos is None or abs(pos) > 0.2:
+            raise RuntimeError(
+                f"gripper re-homing verification failed: expected ~0 rad at the "
+                f"closed stop, read {pos}")
+        return {"rehomed": True, "closed_stop_pos": pos}
+
     def enable(self):
         self._require_fresh_state()
+        wrapped = self._gripper_wrap_check()
+        if wrapped is not None:
+            raise RuntimeError(
+                f"gripper reads {wrapped:+.3f} rad, outside calibrated travel "
+                f"[{min(self.args.gripper_open, self.args.gripper_close):.1f}, "
+                f"{max(self.args.gripper_open, self.args.gripper_close):.1f}] rad "
+                f"(+/- {GRIPPER_WRAP_MARGIN:.1f} margin): multi-turn encoder wrapped "
+                f"after a power cycle. POST /rehome_gripper first (motors disabled).")
         with self.lock:
             for mid in ARM_IDS + [GRIPPER_ID]:
                 m = self.motors[mid]
@@ -466,6 +569,8 @@ def make_handler(daemon: ArmDaemon):
             elif self.path == "/gripper":
                 self._dispatch(daemon.gripper, body.get("action"),
                                body.get("pos"), body.get("vlim", 2.0))
+            elif self.path == "/rehome_gripper":
+                self._dispatch(daemon.rehome_gripper)
             else:
                 self._send(404, {"error": "unknown endpoint"})
     return Handler
