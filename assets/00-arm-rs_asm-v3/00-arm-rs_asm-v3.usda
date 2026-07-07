@@ -10,7 +10,7 @@
 )
 
 def Xform "tn__00armrs_asmv3_hJ6D" (
-    prepend apiSchemas = ["GeomModelAPI"]
+    prepend apiSchemas = ["GeomModelAPI", "IsaacRobotAPI"]
     assetInfo = {
         string name = "00-arm-rs_asm-v3"
     }
@@ -20,7 +20,30 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
 )
 {
     float3[] extentsHint = [(-0.2596303, -0.1, -1.0949644e-11), (0.30171034, 0.1, 0.3207462), (3.4028235e38, 3.4028235e38, 3.4028235e38), (-3.4028235e38, -3.4028235e38, -3.4028235e38), (3.4028235e38, 3.4028235e38, 3.4028235e38), (-3.4028235e38, -3.4028235e38, -3.4028235e38), (-0.2596303, -0.1, -1.0949644e-11), (0.30171034, 0.1, 0.32074627)]
-
+    rel isaac:physics:robotJoints = [
+        </tn__00armrs_asmv3_hJ6D/Physics/root_joint>,
+        </tn__00armrs_asmv3_hJ6D/Physics/joint1>,
+        </tn__00armrs_asmv3_hJ6D/Physics/joint2>,
+        </tn__00armrs_asmv3_hJ6D/Physics/joint3>,
+        </tn__00armrs_asmv3_hJ6D/Physics/joint4>,
+        </tn__00armrs_asmv3_hJ6D/Physics/joint5>,
+        </tn__00armrs_asmv3_hJ6D/Physics/joint6>,
+        </tn__00armrs_asmv3_hJ6D/Physics/j_gripper_end>,
+        </tn__00armrs_asmv3_hJ6D/Physics/joint_left>,
+        </tn__00armrs_asmv3_hJ6D/Physics/joint_right>,
+    ]
+    rel isaac:physics:robotLinks = [
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link>,
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link/link1>,
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link/link1/link2>,
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link/link1/link2/link3>,
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link/link1/link2/link3/link4>,
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link/link1/link2/link3/link4/link5>,
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link/link1/link2/link3/link4/link5/link6>,
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link/link1/link2/link3/link4/link5/link6/gripper_end>,
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link/link1/link2/link3/link4/link5/link6/gripper_end/gripper_left>,
+        </tn__00armrs_asmv3_hJ6D/Geometry/base_link/link1/link2/link3/link4/link5/link6/gripper_end/gripper_right>,
+    ]
     over "MDLMaterials" (
         prepend references = @./Payload/MDLMaterials.usda@</Materials>
     )
@@ -29,8 +52,14 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
 
     over "Geometry"
     {
-        over "base_link"
+        over "base_link" (
+            prepend apiSchemas = ["IsaacLinkAPI"]
+        )
         {
+            bool newton:selfCollisionEnabled = 0
+            custom int newton:solver:nconmax = 8192
+            custom int newton:solver:njmax = 32768
+
             over "base_link" (
                 prepend apiSchemas = ["MaterialBindingAPI"]
             )
@@ -38,7 +67,9 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
                 rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather>
             }
 
-            over "link1"
+            over "link1" (
+                prepend apiSchemas = ["IsaacLinkAPI"]
+            )
             {
                 over "link1" (
                     prepend apiSchemas = ["MaterialBindingAPI"]
@@ -47,7 +78,9 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
                     rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
                 }
 
-                over "link2"
+                over "link2" (
+                    prepend apiSchemas = ["IsaacLinkAPI"]
+                )
                 {
                     over "motor_2_3" (
                         prepend apiSchemas = ["MaterialBindingAPI"]
@@ -77,7 +110,9 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
                         rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather_Pop_Lime>
                     }
 
-                    over "link3"
+                    over "link3" (
+                        prepend apiSchemas = ["IsaacLinkAPI"]
+                    )
                     {
                         over "cnc3" (
                             prepend apiSchemas = ["MaterialBindingAPI"]
@@ -107,7 +142,9 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
                             rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather_Pop_Lime>
                         }
 
-                        over "link4"
+                        over "link4" (
+                            prepend apiSchemas = ["IsaacLinkAPI"]
+                        )
                         {
                             over "motor_5" (
                                 prepend apiSchemas = ["MaterialBindingAPI"]
@@ -123,7 +160,9 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
                                 rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
                             }
 
-                            over "link5"
+                            over "link5" (
+                                prepend apiSchemas = ["IsaacLinkAPI"]
+                            )
                             {
                                 over "motor_6" (
                                     prepend apiSchemas = ["MaterialBindingAPI"]
@@ -146,7 +185,9 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
                                     rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/ABS_Hard_Leather_Pop_Lime>
                                 }
 
-                                over "link6"
+                                over "link6" (
+                                    prepend apiSchemas = ["IsaacLinkAPI"]
+                                )
                                 {
                                     over "link6" (
                                         prepend apiSchemas = ["MaterialBindingAPI"]
@@ -155,7 +196,9 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
                                         rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized>
                                     }
 
-                                    over "gripper_end"
+                                    over "gripper_end" (
+                                        prepend apiSchemas = ["IsaacLinkAPI"]
+                                    )
                                     {
                                         over "pla7_green" (
                                             prepend apiSchemas = ["MaterialBindingAPI"]
@@ -178,7 +221,9 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
                                             rel material:binding = </tn__00armrs_asmv3_hJ6D/MDLMaterials/Aluminum_Anodized_Black>
                                         }
 
-                                        over "gripper_left"
+                                        over "gripper_left" (
+                                            prepend apiSchemas = ["IsaacLinkAPI"]
+                                        )
                                         {
                                             over "pla_left" (
                                                 prepend apiSchemas = ["MaterialBindingAPI"]
@@ -202,7 +247,9 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
                                             }
                                         }
 
-                                        over "gripper_right"
+                                        over "gripper_right" (
+                                            prepend apiSchemas = ["IsaacLinkAPI"]
+                                        )
                                         {
                                             over "pla_right" (
                                                 prepend apiSchemas = ["MaterialBindingAPI"]
@@ -290,9 +337,75 @@ def Xform "tn__00armrs_asmv3_hJ6D" (
             }
         }
     }
+
+    over "Physics"
+    {
+        over "root_joint" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "joint1" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "joint2" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+            float physics:upperLimit = 179.90875
+        }
+
+        over "joint3" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "joint4" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+            float physics:lowerLimit = -89.95438
+        }
+
+        over "joint5" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "joint6" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "j_gripper_end" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "joint_left" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+
+        over "joint_right" (
+            prepend apiSchemas = ["IsaacJointAPI"]
+        )
+        {
+        }
+    }
 }
 
 def PhysicsScene "PhysicsScene" (
+    prepend apiSchemas = ["MjcSceneAPI"]
     prepend payload = @./Payload/Contents.usda@</PhysicsScene>
 )
 {

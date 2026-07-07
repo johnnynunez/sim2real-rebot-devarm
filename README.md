@@ -200,3 +200,14 @@ python scripts/isaacsim_client.py --timeout 300 --file isaac/04_fix_newton_conta
 Do not raise `nconmax` beyond Newton's allocated `rigid_contact_max` — the
 script clamps automatically (values above it make every step error out).
 
+> **Update (2026-07-07):** the shipped asset now persists the caps in USD as
+> custom attrs on the articulation root (`newton:solver:nconmax = 8192`,
+> `newton:solver:njmax = 32768`), so patched Isaac builds pick them up on
+> stage open with no runtime script. Recent Newton builds also take
+> `max(user value, geometry estimate)` for `nconmax`, so over-raising is safe
+> there (verify the real allocation with `solver.mjw_data.naconmax`). On stock
+> develop the attrs are ignored harmlessly and `04_fix_newton_contacts.py`
+> remains the fix. The asset also ships `newton:selfCollisionEnabled = 0` and
+> the `IsaacRobotAPI` schema (Gain Tuner dropdown + 8/8 snap-to-limits pass);
+> full data in `assets/00-arm-rs_asm-v3/evidence/analysis_2026-07-07/`.
+

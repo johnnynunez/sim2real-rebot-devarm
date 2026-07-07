@@ -88,6 +88,47 @@ via the newton kit experience.)
   all joints to limits simultaneously folds the arm into itself.
 - This package ships hybrid colliders: convexHull on body/links (engine-agreement
   validated), convexDecomposition on gripper_end/left/right (hulls filled the
-  finger gap and caused false premature contact). Default MuJoCo-Warp contact caps
-  are sufficient for this hybrid; do NOT raise nconmax above the allocated
-  rigid_contact_max or every step errors.
+  finger gap and caused false premature contact).
+- **MuJoCo-Warp caps (updated 2026-07-07):** this asset persists
+  `newton:solver:nconmax = 8192` / `newton:solver:njmax = 32768` as custom attrs on
+  the articulation root (stock defaults 200/1200 overflow with these colliders —
+  contacts silently dropped). Honored by the patched
+  `newton_stage._apply_usd_solver_overrides()`; on stock develop set them manually
+  before physics init. Newton takes `max(user, geometry estimate)`, so a high cap
+  is safe; verify with `solver.mjw_data.naconmax`.
+- **Self-collision (updated 2026-07-07):** asset ships
+  `newton:selfCollisionEnabled = 0`. Do NOT rely on the Gain Tuner
+  "Disable Self-Collisions" checkbox under Newton — it writes the PhysX attr
+  (`physxArticulation:enabledSelfCollisions`) which Newton ignores. This collision
+  decomposition interpenetrates at rest (6915 self-contacts at home), so enabling
+  self-collision without filtering blocks joint2/joint4 at their limits. For real
+  self-collision use the `00-arm-rs_asm-v3-plus` variant (19 `physics:filteredPairs`,
+  home contacts 6915 -> 34; needs the body-level expansion patch in newton_stage.py).
+- Gain Tuner Snap-to-Limits validated 8/8 joints pass on this asset
+  (self-collision off, manufacturer limits, unchanged gains; errors ~1e-5 rad).
+
+## D. Verify solver buffers and self-contacts (Script Editor, Play active)
+
+```python
+import isaacsim.physics.newton as newton_ext
+
+ns = newton_ext.acquire_stage()
+d = ns.solver.mjw_data
+print("nconmax:", d.naconmax, "| njmax:", d.njmax)   # expect 8192 / 32768
+
+# Self-contact census by body pair (run at home pose)
+model = ns.model
+names = [b.split("/")[-1] for b in model.body_label]
+sb = model.shape_body.numpy()
+c = ns.contacts
+n = int(c.rigid_contact_count.numpy()[0])
+pairs = {}
+for a, b in zip(c.rigid_contact_shape0.numpy()[:n], c.rigid_contact_shape1.numpy()[:n]):
+    if a < 0 or b < 0: continue
+    ba, bb = sb[a], sb[b]
+    if ba < 0 or bb < 0 or ba == bb: continue
+    k = tuple(sorted((names[ba], names[bb])))
+    pairs[k] = pairs.get(k, 0) + 1
+for k, v in sorted(pairs.items(), key=lambda kv: -kv[1])[:10]:
+    print(k, v)
+```

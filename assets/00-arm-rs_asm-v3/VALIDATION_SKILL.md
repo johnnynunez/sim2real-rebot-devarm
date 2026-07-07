@@ -146,20 +146,56 @@ For the full statistical report + standard 5-figure set (tracking/error/diff/ste
 Bland-Altman) and parity acceptance thresholds, see
 [`references/engine-ab-statistics.md`](references/engine-ab-statistics.md).
 
+## Newton-specific findings (2026-07-07 session)
+
+- **Gain Tuner dropdown requires the Robot schema.** "No robot selected/found" with a
+  valid articulation means the asset lacks `IsaacRobotAPI`. Apply RobotAPI on the robot
+  root + LinkAPI/JointAPI on every rigid body/joint + `isaac:physics:robotLinks`/
+  `robotJoints` relationships (recent URDF importers author these; older assets do not).
+  Reopen the Gain Tuner window afterwards. This asset ships with the schema applied.
+- **The Gain Tuner "Disable Self-Collisions" checkbox is a NO-OP on Newton.** It writes
+  `physxArticulation:enabledSelfCollisions` (PhysX attr, absent on converter assets).
+  Newton's parser resolves self-collision from `newton:selfCollisionEnabled`
+  (NewtonArticulationRootAPI) on the articulation root. Author that attr and stop/play
+  (cook-time) instead. This asset ships `newton:selfCollisionEnabled = 0`.
+- **Measure contacts at HOME pose before trusting self-collision.** With self-collision
+  ON this decomposition produces 6915 permanent self-contacts at rest (75% of them
+  gripper_left↔gripper_right) — the convex pieces interpenetrate by construction.
+  Symptom: snap tests report `blocked` on the heavy-load joints (here joint2 upper /
+  joint4 lower) with errors ~0.1–0.6 rad. Probe with
+  `ns.contacts.rigid_contact_shape0/1` + `model.shape_body` to map contacts to body
+  pairs. Self-collision OFF is the only sane default for this collision geometry:
+  8/8 joints pass with errors ~1e-5 rad and unchanged gains.
+- **Limit trimming CANNOT fix collision-blocked joints.** The stall angle is
+  pose-dependent (base_link↔gripper contact depends on the whole arm configuration):
+  trims to 173°/168°/166° (joint2) and −55°/−40° (joint4) all still blocked. A 1-D
+  joint limit cannot encode an N-D constraint — keep manufacturer limits and let
+  collision (or a planner) handle it.
+- **Surgical alternative — the "plus" variant** (`00-arm-rs_asm-v3-plus`): keep
+  self-collision ON but author `physics:filteredPairs` for the 19 garbage pairs
+  (>20 contacts at home). Home contacts drop 6915 → 34 while REAL fold collision
+  stays active. Newton's parser only honors shape-level targets, so the patched
+  `newton_stage._apply_usd_filtered_pairs()` (2026-07-07, not in develop stock)
+  expands body-level relationships to all shape pairs (~8000) at parse time.
+  On stock develop the plus asset degrades to unfiltered self-collision ON.
+
 ## Pitfalls
 
-- **MuJoCo-Warp contact cap overflows SILENTLY.** Default `nconmax=200`, `njmax=1200`
+- **MuJoCo-Warp contact cap overflows SILENTLY.** Stock `nconmax=200`, `njmax=1200`
   (`MuJoCoSolverConfig`). convexDecomposition colliders exceed it → contacts dropped,
-  garbage sim, log spam only. Raise before physics init:
+  garbage sim, log spam only (`Number of Newton contacts (N) exceeded MJWarp limit`).
+  Raise before physics init:
   ```python
   from isaacsim.physics.newton.impl import extension as _next
-  _next._newton_stage.cfg.solver_cfg.nconmax = 4000
-  _next._newton_stage.cfg.solver_cfg.njmax = 12000
+  _next._newton_stage.cfg.solver_cfg.nconmax = 8192
+  _next._newton_stage.cfg.solver_cfg.njmax = 32768
   ```
-  BUT do NOT leave a raised nconmax when running a convexHull asset: if nconmax
-  exceeds the allocated `contacts.rigid_contact_max` (sized from the scene), every
-  step errors with `MuJoCo naconmax (4000) exceeds contacts.rigid_contact_max (...)`.
-  Match the cap to the collider style actually loaded.
+  Newton uses `max(user value, geometry estimate)`, so raising is always safe on
+  modern builds; verify the real allocation with `solver.mjw_data.naconmax` (note
+  the `na` prefix). This asset PERSISTS the caps in USD as custom attrs on the
+  articulation root — `newton:solver:nconmax = 8192`, `newton:solver:njmax = 32768` —
+  honored by the patched `newton_stage._apply_usd_solver_overrides()` (2026-07-07,
+  not in develop stock; stock ignores the attrs harmlessly).
 - **convexDecomposition is not a free upgrade.** It fixed gripper blocked on PhysX but
   broke engine agreement (spurious grazing contacts differ per engine: PhysX arm rms
   0.011→0.166 rad). Ship convexHull unless a measured need says otherwise.
