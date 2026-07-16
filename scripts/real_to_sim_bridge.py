@@ -1,42 +1,33 @@
 #!/usr/bin/env python3
-"""Real-to-sim bridge (real side) for the reBot Arm B601-DM.
+"""Real-to-sim bridge (real side) for the reBot Arm.
 
-Reads joint positions from the physical arm over the Damiao serial bridge
-(passive: request_feedback only, motors are NEVER enabled) and streams them
-as JSON over UDP to the Isaac Sim side (isaac/02_start_mirror.py).
+Reads joint positions from the physical arm (Damiao dm-serial or RobStride
+SocketCAN; passive: request_feedback only, motors are NEVER enabled) and
+streams them as JSON over UDP to the Isaac Sim side (isaac/02_start_mirror.py).
 
 The arm stays fully limp — move it by hand and watch the sim mirror it.
 
 Usage:
     python scripts/real_to_sim_bridge.py [--rate 50] [--port 5801]
+    python scripts/real_to_sim_bridge.py --vendor robstride --channel can0
 """
 import argparse
 import json
 import socket
 import time
 
-from motorbridge import Controller
-
-# Motor model per joint (verified via register dump on our unit: motors 1-3
-# report tau_max=28 -> DM4340, motors 4-7 report vel_max=30/tau_max=10 -> DM4310).
-# Motor 7 is the gripper.
-MODELS = {1: "4340", 2: "4340", 3: "4340", 4: "4310", 5: "4310", 6: "4310", 7: "4310"}
+from rebot_vendor import add_vendor_args, make_controller_and_motors
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--serial-port", default="/dev/ttyACM0")
-    ap.add_argument("--baud", type=int, default=921600)
+    add_vendor_args(ap)
     ap.add_argument("--rate", type=float, default=50.0, help="poll rate in Hz")
     ap.add_argument("--port", type=int, default=5801, help="UDP target port")
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
 
-    ctrl = Controller.from_dm_serial(serial_port=args.serial_port, baud=args.baud)
-    motors = {
-        mid: ctrl.add_damiao_motor(motor_id=mid, feedback_id=mid + 0x10, model=model)
-        for mid, model in MODELS.items()
-    }
+    ctrl, motors = make_controller_and_motors(args)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     dst = (args.host, args.port)
@@ -54,11 +45,12 @@ def main() -> None:
                 m.request_feedback()
             # tiny settle so replies land before reading states
             time.sleep(0.001)
+            ctrl.poll_feedback_once()  # pump RX (required on SocketCAN; harmless on dm-serial)
             for mid, m in motors.items():
                 st = m.get_state()
                 if st is not None:
                     q[str(mid)] = st.pos
-            if len(q) == len(MODELS):
+            if len(q) == len(motors):
                 sock.sendto(json.dumps({"t": time.time(), "q": q}).encode(), dst)
                 n_sent += 1
             if time.monotonic() - t_report >= 2.0:

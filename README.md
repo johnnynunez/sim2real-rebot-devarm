@@ -34,6 +34,43 @@ Motor IDs and zero calibration must be done first — follow the
 [official getting-started guide](https://wiki.seeedstudio.com/rebot_b601_dm_getting_started/)
 (factory pre-assembled arms ship with IDs already written).
 
+### RobStride build
+
+The scripts also support arms built from RobStride RS-series motors
+(`--vendor robstride`, or set `REBOT_VENDOR=robstride`). Differences vs the
+Damiao table above:
+
+| Item | Value |
+|---|---|
+| Arm | 7x RobStride RS-series (motor models per joint in `scripts/rebot_vendor.py` — defaults are `rs-00` placeholders, set your actual `rs-00`..`rs-06` models) |
+| Adapter | any SocketCAN adapter (e.g. PCAN, candleLight/gs_usb), classic CAN at 1 Mbps |
+| Motor IDs | CAN ID 1..7, feedback goes to the fixed host ID 0xFD (RobStride convention) |
+
+Bring up the CAN interface (no serial-port permissions needed — the
+`dialout`/`chmod` step above is dm-serial only; SocketCAN just needs the
+link up):
+
+```bash
+sudo ip link set can0 up type can bitrate 1000000
+```
+
+Then pass `--vendor robstride --channel can0` to any of the vendor-aware
+scripts (`--serial-port`/`--baud` are ignored for robstride):
+
+```bash
+python scripts/read_joints.py        --vendor robstride --channel can0
+python scripts/real_to_sim_bridge.py --vendor robstride --channel can0 --rate 50
+python scripts/move_joint_test.py    --vendor robstride --channel can0 --motor 1 --step -0.3 --vlim 0.5
+python scripts/rebot_daemon.py       --vendor robstride --channel can0
+```
+
+Mode.POS_VEL maps to the RobStride Position-PP mode, so the daemon's
+enable/hold/move/servo paths work unchanged. The daemon's torque-abort
+thresholds for robstride are conservative placeholders — tune them in
+`scripts/rebot_daemon.py` (`TORQUE_ABORT["robstride"]`) for the actual
+RS-series models fitted. The gripper wrap/rehome logic was characterized on
+Damiao hardware; re-verify open/close calibration on an RS build.
+
 ## Setup
 
 ```bash
@@ -170,6 +207,7 @@ loss recovery.
 assets/
   00-arm-rs_asm-v3/       # arm USD package (Newton+PhysX validated) + evidence
 scripts/
+  rebot_vendor.py         # vendor selection (damiao/robstride): models, transport
   real_to_sim_bridge.py   # real arm -> UDP joint stream (passive, 50 Hz)
   read_joints.py          # print joint positions (sanity check)
   move_joint_test.py      # supervised single-joint move (POS_VEL, slow)
