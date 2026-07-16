@@ -16,7 +16,7 @@ import json
 import socket
 import time
 
-from rebot_vendor import add_vendor_args, make_controller_and_motors
+from rebot_vendor import add_vendor_args, make_controller_and_motors, read_positions
 
 
 def main() -> None:
@@ -40,16 +40,7 @@ def main() -> None:
     try:
         while True:
             t0 = time.monotonic()
-            q = {}
-            for mid, m in motors.items():
-                m.request_feedback()
-            # tiny settle so replies land before reading states
-            time.sleep(0.001)
-            ctrl.poll_feedback_once()  # pump RX (required on SocketCAN; harmless on dm-serial)
-            for mid, m in motors.items():
-                st = m.get_state()
-                if st is not None:
-                    q[str(mid)] = st.pos
+            q = {str(mid): pos for mid, pos in read_positions(args.vendor, ctrl, motors).items()}
             if len(q) == len(motors):
                 sock.sendto(json.dumps({"t": time.time(), "q": q}).encode(), dst)
                 n_sent += 1

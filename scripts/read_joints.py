@@ -9,7 +9,7 @@ Usage:
 import argparse
 import time
 
-from rebot_vendor import add_vendor_args, make_controller_and_motors
+from rebot_vendor import add_vendor_args, make_controller_and_motors, read_positions
 
 
 def main() -> None:
@@ -21,13 +21,8 @@ def main() -> None:
     ctrl, motors = make_controller_and_motors(args)
     try:
         for _ in range(args.cycles):
-            line = []
-            for mid, m in motors.items():
-                m.request_feedback()
-                time.sleep(0.002)
-                ctrl.poll_feedback_once()  # pump RX (required on SocketCAN; harmless on dm-serial)
-                st = m.get_state()
-                line.append(f"j{mid}={st.pos:+.4f}" if st else f"j{mid}=NONE")
+            q = read_positions(args.vendor, ctrl, motors)
+            line = [f"j{mid}={q[mid]:+.4f}" if mid in q else f"j{mid}=NONE" for mid in motors]
             print("  ".join(line), flush=True)
             time.sleep(0.1)
     finally:
