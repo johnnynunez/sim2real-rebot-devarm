@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""HTTP control daemon for the reBot Arm B601-DM (Damiao motors, dm-serial).
+"""HTTP control daemon for the reBot Arm (Damiao dm-serial or RobStride SocketCAN).
 
-Single owner of the serial port. Exposes a small JSON API for agent tools:
+Single owner of the motor transport. Exposes a small JSON API for agent tools:
 
     GET  /health         daemon + serial + kinematics status
     GET  /state          per-joint pos/vel/torque/temps + timestamp
@@ -35,16 +35,21 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import numpy as np
-from motorbridge import Controller, Mode
+from motorbridge import Mode
+from rebot_vendor import add_vendor_args, make_controller_and_motors
 
-# Motor model per joint (verified via register dump: motors 1-3 tau_max=28
-# -> DM4340, motors 4-7 vel_max=30 / tau_max=10 -> DM4310). Motor 7 = gripper.
-MODELS = {1: "4340", 2: "4340", 3: "4340", 4: "4310", 5: "4310", 6: "4310", 7: "4310"}
+# Motor models per joint live in rebot_vendor.py (single source of truth).
 ARM_IDS = [1, 2, 3, 4, 5, 6]
 GRIPPER_ID = 7
 
-# Sustained torque abort thresholds (Nm), conservative vs URDF effort limits.
-TORQUE_ABORT = {1: 22.0, 2: 22.0, 3: 22.0, 4: 9.0, 5: 9.0, 6: 9.0, 7: 9.0}
+# Sustained torque abort thresholds (Nm), per vendor.
+TORQUE_ABORT = {
+    # Damiao: conservative vs URDF effort limits (DM4340 / DM4310).
+    "damiao": {1: 22.0, 2: 22.0, 3: 22.0, 4: 9.0, 5: 9.0, 6: 9.0, 7: 9.0},
+    # RobStride placeholder: RS-series per-model torque limits vary — these
+    # are conservative defaults, tune per the rs-* model fitted at each joint.
+    "robstride": {1: 8.0, 2: 8.0, 3: 8.0, 4: 4.0, 5: 4.0, 6: 4.0, 7: 4.0},
+}
 TEMP_ABORT_C = 65.0
 MAX_VLIM = 1.0          # hard cap on commanded velocity limit (rad/s)
 DEFAULT_VLIM = 0.5
@@ -155,13 +160,8 @@ class ArmDaemon:
         except Exception as e:  # daemon still useful without kinematics
             self.kin_error = f"{type(e).__name__}: {e}"
 
-        self.ctrl = Controller.from_dm_serial(
-            serial_port=args.serial_port, baud=args.baud)
-        self.motors = {
-            mid: self.ctrl.add_damiao_motor(
-                motor_id=mid, feedback_id=mid + 0x10, model=model)
-            for mid, model in MODELS.items()
-        }
+        self.torque_abort = TORQUE_ABORT[args.vendor]
+        self.ctrl, self.motors = make_controller_and_motors(args)
         self.mirror = None
         if args.mirror_port:
             self.mirror = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -179,6 +179,7 @@ class ArmDaemon:
                 for m in self.motors.values():
                     m.request_feedback()
                 time.sleep(0.001)
+                self.ctrl.poll_feedback_once()  # pump RX (required on SocketCAN; harmless on dm-serial)
                 snap = {}
                 for mid, m in self.motors.items():
                     st = m.get_state()
@@ -190,7 +191,7 @@ class ArmDaemon:
             if snap:
                 self.state = snap
                 self.state_t = time.time()
-                if self.mirror and len(snap) == len(MODELS):
+                if self.mirror and len(snap) == len(self.motors):
                     payload = {"t": self.state_t,
                                "q": {str(k): v["pos"] for k, v in snap.items()}}
                     try:
@@ -208,7 +209,7 @@ class ArmDaemon:
                     s = self.state.get(mid)
                     if s is None:
                         continue
-                    if abs(s["torq"]) > TORQUE_ABORT[mid]:
+                    if abs(s["torq"]) > self.torque_abort[mid]:
                         self._servo_strikes[mid] = self._servo_strikes.get(mid, 0) + 1
                         if self._servo_strikes[mid] >= 3:
                             self._estop(f"motor {mid} torque {s['torq']:.1f} Nm (servo)")
@@ -220,7 +221,7 @@ class ArmDaemon:
 
     # ---------------- helpers ----------------
     def _require_fresh_state(self):
-        if time.time() - self.state_t > 0.5 or len(self.state) < len(MODELS):
+        if time.time() - self.state_t > 0.5 or len(self.state) < len(self.motors):
             raise RuntimeError("joint state stale or incomplete")
 
     def q_real(self):
@@ -249,6 +250,9 @@ class ArmDaemon:
         targets are then wrong by whole turns and drive the mechanism into its
         stop through the gear reduction -- the prime suspect for silently latched
         coil over-temp faults. Returns the offending reading, or None if sane.
+
+        Characterized on Damiao hardware; positions are multi-turn absolute for
+        both vendors, so the guard stays active on RobStride builds as well.
         """
         s = self.state.get(GRIPPER_ID)
         if s is None or self.args.gripper_open is None or self.args.gripper_close is None:
@@ -333,7 +337,8 @@ class ArmDaemon:
             for mid in ARM_IDS + [GRIPPER_ID]:
                 m = self.motors[mid]
                 # Damiao motors latch protection faults (e.g. coil over-temp
-                # status 0xC) and silently produce zero torque until cleared.
+                # status 0xC) and silently produce zero torque until cleared;
+                # clear_error is also supported (and harmless) on RobStride.
                 m.clear_error()
                 m.enable()
                 m.ensure_mode(Mode.POS_VEL)
@@ -378,7 +383,7 @@ class ArmDaemon:
                 errs = [abs(self.state[mid]["pos"] - q_target_real[i])
                         for i, mid in enumerate(ARM_IDS)]
                 for mid in ARM_IDS:
-                    if abs(self.state[mid]["torq"]) > TORQUE_ABORT[mid]:
+                    if abs(self.state[mid]["torq"]) > self.torque_abort[mid]:
                         torque_strikes[mid] += 1
                         if torque_strikes[mid] >= 3:
                             raise RuntimeError(self._estop(
@@ -505,7 +510,9 @@ class ArmDaemon:
         return pose
 
     def health(self):
-        return {"ok": True, "serial": self.args.serial_port,
+        transport = (self.args.serial_port if self.args.vendor == "damiao"
+                     else self.args.channel)
+        return {"ok": True, "vendor": self.args.vendor, "serial": transport,
                 "state_age_s": round(time.time() - self.state_t, 3),
                 "joints_seen": sorted(self.state.keys()),
                 "enabled": self.enabled,
@@ -578,8 +585,7 @@ def make_handler(daemon: ArmDaemon):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--serial-port", default="/dev/ttyACM0")
-    ap.add_argument("--baud", type=int, default=921600)
+    add_vendor_args(ap)
     ap.add_argument("--rate", type=float, default=50.0)
     ap.add_argument("--http-port", type=int, default=5810)
     ap.add_argument("--mirror-host", default="127.0.0.1")
@@ -604,8 +610,10 @@ def main():
     daemon = ArmDaemon(args)
     srv = ThreadingHTTPServer(("127.0.0.1", args.http_port),
                               make_handler(daemon))
+    transport = (f"serial {args.serial_port}" if args.vendor == "damiao"
+                 else f"socketcan {args.channel}")
     print(f"reBot Arm daemon on http://127.0.0.1:{args.http_port}  "
-          f"(serial {args.serial_port}, motors passive until /enable)")
+          f"({args.vendor}: {transport}, motors passive until /enable)")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
