@@ -10,6 +10,7 @@ Two supported arm builds:
 Scripts pick the vendor with --vendor (default: env REBOT_VENDOR, else damiao).
 """
 import os
+import time
 
 from motorbridge import Controller
 
@@ -67,10 +68,48 @@ def make_controller_and_motors(args, ids=None):
         for mid in ids
     }
     if args.vendor == "robstride":
-        # RS firmware only streams the classic type-2 feedback frames (the ones
-        # motorbridge's state decoder consumes) with active report enabled; the
-        # compact type-0x18 report frames it emits otherwise are not decoded, so
-        # get_state() would stay None forever (verified on RS hardware).
+        # Nudge the firmware toward the classic type-2 feedback frames. On the
+        # RS firmware tested this yields one feedback frame per motor (enough to
+        # seed get_state()) but NOT a periodic stream — its idle streaming uses
+        # compact type-0x18 report frames that motorbridge's state decoder does
+        # not consume. Position reads must therefore go through read_positions()
+        # below, which uses parameter reads (verified live on RS hardware).
         for m in motors.values():
             m.robstride_set_active_report(True)
     return ctrl, motors
+
+
+# RobStride parameter indices (read as exact f32, already rad / rad/s).
+ROBSTRIDE_PARAM_MECH_POS = 0x7019
+ROBSTRIDE_PARAM_MECH_VEL = 0x701A
+
+
+def read_positions(vendor, ctrl, motors, timeout_ms=20):
+    """Read joint positions [rad] for all motors; returns {motor_id: pos}.
+
+    Motors that fail to reply this cycle are simply absent from the result
+    (callers already treat an incomplete snapshot as "skip this cycle").
+
+    - damiao: request_feedback + poll + get_state (the dm-serial pattern).
+    - robstride: single-parameter read of mechPos per motor. get_state() is NOT
+      live on RS firmware (see make_controller_and_motors); param-read replies
+      are, and carry exact f32 radians.
+    """
+    q = {}
+    if vendor == "robstride":
+        for mid, m in motors.items():
+            try:
+                q[mid] = m.robstride_get_param_f32(ROBSTRIDE_PARAM_MECH_POS,
+                                                   timeout_ms=timeout_ms)
+            except Exception:
+                pass  # missed reply; caller holds/skips this cycle
+        return q
+    for m in motors.values():
+        m.request_feedback()
+    time.sleep(0.001)
+    ctrl.poll_feedback_once()
+    for mid, m in motors.items():
+        st = m.get_state()
+        if st is not None:
+            q[mid] = st.pos
+    return q
